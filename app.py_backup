@@ -76,3 +76,4 @@ if uploaded_file:
         st.warning("No 'diagnosis' column in uploaded dataset. Predictions are made without metrics.")
         st.write("Predicted labels:")
         st.write(y_pred)
+
