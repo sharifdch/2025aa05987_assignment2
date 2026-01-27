@@ -1,0 +1,95 @@
+import streamlit as st
+import pandas as pd
+import joblib
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (
+    accuracy_score, roc_auc_score,
+    precision_score, recall_score,
+    f1_score, matthews_corrcoef,
+    confusion_matrix, ConfusionMatrixDisplay
+)
+from sklearn.impute import SimpleImputer
+import matplotlib.pyplot as plt
+import requests
+
+# Title
+st.title("Breast Cancer Classification App")
+
+# -------------------------------
+# Dataset Download Button
+# -------------------------------
+dataset_url = "https://raw.githubusercontent.com/sharifdch/2025aa05987_assignment2/main/dataset.csv"
+response = requests.get(dataset_url)
+dataset_data = response.content
+
+st.sidebar.download_button(
+    label="Download Dataset CSV",
+    data=dataset_data,
+    file_name="dataset.csv",
+    mime="text/csv"
+)
+
+# -------------------------------
+# Sidebar - Upload CSV
+# -------------------------------
+uploaded_file = st.sidebar.file_uploader("Upload your CSV dataset", type=["csv"])
+
+# Sidebar - Model Selection
+model_name = st.sidebar.selectbox(
+    "Select Model",
+    ["Logistic Regression", "Decision Tree", "KNN", "Naive Bayes", "Random Forest", "XGBoost"]
+)
+
+if uploaded_file:
+    # Load dataset
+    df = pd.read_csv(uploaded_file)
+    
+    # Drop unwanted columns if they exist
+    X = df.drop(columns=["diagnosis", "id", "Unnamed: 32"], errors="ignore")
+    
+    # Handle NaN values
+    imputer = SimpleImputer(strategy="mean")
+    X_clean = imputer.fit_transform(X)
+    
+    # Scaling
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_clean)
+    
+    # Load the selected model
+    model = joblib.load(f"model/{model_name}.pkl")
+    
+    # Prediction
+    y_pred = model.predict(X_scaled)
+    y_prob = model.predict_proba(X_scaled)[:, 1] if hasattr(model, "predict_proba") else None
+
+    # If diagnosis exists, compare with actual labels
+    if "diagnosis" in df.columns:
+        y_true = df["diagnosis"].map({"M": 1, "B": 0})
+        
+        # Metrics
+        acc = accuracy_score(y_true, y_pred)
+        auc = roc_auc_score(y_true, y_prob) if y_prob is not None else "N/A"
+        prec = precision_score(y_true, y_pred)
+        rec = recall_score(y_true, y_pred)
+        f1 = f1_score(y_true, y_pred)
+        mcc = matthews_corrcoef(y_true, y_pred)
+        
+        st.subheader("Evaluation Metrics")
+        st.write(f"**Accuracy:** {acc:.4f}")
+        st.write(f"**AUC:** {auc if auc == 'N/A' else round(auc,4)}")
+        st.write(f"**Precision:** {prec:.4f}")
+        st.write(f"**Recall:** {rec:.4f}")
+        st.write(f"**F1 Score:** {f1:.4f}")
+        st.write(f"**MCC:** {mcc:.4f}")
+        
+        # Confusion Matrix
+        cm = confusion_matrix(y_true, y_pred)
+        st.subheader("Confusion Matrix")
+        fig, ax = plt.subplots()
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["B", "M"])
+        disp.plot(ax=ax)
+        st.pyplot(fig)
+    else:
+        st.warning("No 'diagnosis' column in uploaded dataset. Predictions are made without metrics.")
+        st.write("Predicted labels:")
+        st.write(y_pred)
